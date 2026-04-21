@@ -4,9 +4,12 @@
 
 resource "null_resource" "build_auth_lambda" {
   triggers = {
-    source_hash = sha256(join("", concat(
+    source_hash = base64sha256(join("", concat(
       [filesha256("${path.module}/../lambda/TechChallenge5.Lambda.Auth.csproj")],
-      [for f in fileset("${path.module}/../lambda/src", "**/*.cs") : filesha256("${path.module}/../lambda/src/${f}")]
+      [for f in fileset("${path.module}/../lambda/src/Handlers", "AuthUsuarioHandler.cs") : filesha256("${path.module}/../lambda/src/Handlers/${f}")],
+      [for f in fileset("${path.module}/../lambda/src/Models", "**/*.cs") : filesha256("${path.module}/../lambda/src/Models/${f}")],
+      [for f in fileset("${path.module}/../lambda/src/Repositories", "**/*.cs") : filesha256("${path.module}/../lambda/src/Repositories/${f}")],
+      [for f in fileset("${path.module}/../lambda/src/Services", "**/*.cs") : filesha256("${path.module}/../lambda/src/Services/${f}")]
     )))
   }
 
@@ -40,7 +43,7 @@ resource "null_resource" "build_auth_lambda" {
 
 resource "null_resource" "build_authorizer_lambda" {
   triggers = {
-    source_hash = sha256(join("", concat(
+    source_hash = base64sha256(join("", concat(
       [filesha256("${path.module}/../lambda/TechChallenge5.Lambda.Authorizer.csproj")],
       [filesha256("${path.module}/../lambda/src/Handlers/JwtAuthorizerHandler.cs")]
     )))
@@ -66,6 +69,42 @@ resource "null_resource" "build_authorizer_lambda" {
 
       Push-Location publish-authorizer
       Compress-Archive -Path * -DestinationPath ..\authorizer.zip -Force
+      Pop-Location
+      Pop-Location
+    EOT
+
+    interpreter = ["PowerShell", "-Command"]
+  }
+}
+
+resource "null_resource" "build_database_initializer_lambda" {
+  triggers = {
+    source_hash = base64sha256(join("", concat(
+      [filesha256("${path.module}/../lambda/TechChallenge5.Lambda.DatabaseInitializer.csproj")],
+      [for f in fileset("${path.module}/../lambda/src/DatabaseInitializer", "**/*.cs") : filesha256("${path.module}/../lambda/src/DatabaseInitializer/${f}")]
+    )))
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      Push-Location ${path.module}\..\lambda
+
+      if (Test-Path "publish-db-initializer") { Remove-Item -Path "publish-db-initializer" -Recurse -Force }
+      if (Test-Path "database-initializer.zip") { Remove-Item -Path "database-initializer.zip" -Force }
+
+      dotnet publish TechChallenge5.Lambda.DatabaseInitializer.csproj `
+        -c Release `
+        -r linux-x64 `
+        --self-contained false `
+        -o publish-db-initializer
+
+      if ($LASTEXITCODE -ne 0) {
+        Write-Host "Falha ao buildar o lambda inicializador do banco" -ForegroundColor Red
+        exit 1
+      }
+
+      Push-Location publish-db-initializer
+      Compress-Archive -Path * -DestinationPath ..\database-initializer.zip -Force
       Pop-Location
       Pop-Location
     EOT
@@ -148,13 +187,14 @@ resource "aws_lambda_function" "auth_login" {
     aws_db_instance.mysql
   ]
 
-  filename      = "${path.module}/../lambda/auth.zip"
-  function_name = "${local.project_name}-auth-login"
-  role          = aws_iam_role.lambda_execucao.arn
-  handler       = "TechChallenge5.Lambda.Auth::TechChallenge5.Lambda.Auth.Handlers.AuthUsuarioHandler::HandleLoginAsync"
-  runtime       = "dotnet8"
-  timeout       = 30
-  memory_size   = 256
+  filename         = "${path.module}/../lambda/auth.zip"
+  function_name    = "${local.project_name}-auth-login"
+  role             = aws_iam_role.lambda_execucao.arn
+  handler          = "TechChallenge5.Lambda.Auth::TechChallenge5.Lambda.Auth.Handlers.AuthUsuarioHandler::HandleLoginAsync"
+  runtime          = "dotnet8"
+  timeout          = 30
+  memory_size      = 256
+  source_code_hash = null_resource.build_auth_lambda.triggers.source_hash
 
   vpc_config {
     subnet_ids         = aws_subnet.private[*].id
@@ -179,13 +219,14 @@ resource "aws_lambda_function" "auth_login" {
 resource "aws_lambda_function" "authorizer" {
   depends_on = [null_resource.build_authorizer_lambda]
 
-  filename      = "${path.module}/../lambda/authorizer.zip"
-  function_name = "${local.project_name}-jwt-authorizer"
-  role          = aws_iam_role.lambda_execucao.arn
-  handler       = "TechChallenge5.Lambda.Authorizer::TechChallenge5.Lambda.Authorizer.Handlers.JwtAuthorizerHandler::HandleAuthorization"
-  runtime       = "dotnet8"
-  timeout       = 10
-  memory_size   = 128
+  filename         = "${path.module}/../lambda/authorizer.zip"
+  function_name    = "${local.project_name}-jwt-authorizer"
+  role             = aws_iam_role.lambda_execucao.arn
+  handler          = "TechChallenge5.Lambda.Authorizer::TechChallenge5.Lambda.Authorizer.Handlers.JwtAuthorizerHandler::HandleAuthorization"
+  runtime          = "dotnet8"
+  timeout          = 10
+  memory_size      = 128
+  source_code_hash = null_resource.build_authorizer_lambda.triggers.source_hash
 
   environment {
     variables = {
@@ -197,6 +238,40 @@ resource "aws_lambda_function" "authorizer" {
 
   tags = merge(local.common_tags, {
     Name = "${local.project_name}-jwt-authorizer"
+  })
+}
+
+resource "aws_lambda_function" "database_initializer" {
+  depends_on = [
+    null_resource.build_database_initializer_lambda,
+    aws_db_instance.mysql
+  ]
+
+  filename         = "${path.module}/../lambda/database-initializer.zip"
+  function_name    = "${local.project_name}-database-initializer"
+  role             = aws_iam_role.lambda_execucao.arn
+  handler          = "Tc5.DbInit::Tc5.DbInit.Handlers.DatabaseInitializerHandler::HandleAsync"
+  runtime          = "dotnet8"
+  timeout          = 60
+  memory_size      = 256
+  source_code_hash = null_resource.build_database_initializer_lambda.triggers.source_hash
+
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
+  environment {
+    variables = {
+      DB_SERVER   = local.db_host
+      DB_PORT     = "3306"
+      DB_USER     = var.db_user
+      DB_PASSWORD = var.db_password
+    }
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.project_name}-database-initializer"
   })
 }
 
@@ -216,4 +291,35 @@ resource "aws_cloudwatch_log_group" "authorizer" {
   tags = merge(local.common_tags, {
     Name = "${local.project_name}-authorizer-logs"
   })
+}
+
+resource "aws_cloudwatch_log_group" "database_initializer" {
+  name              = "/aws/lambda/${aws_lambda_function.database_initializer.function_name}"
+  retention_in_days = 7
+
+  tags = merge(local.common_tags, {
+    Name = "${local.project_name}-database-initializer-logs"
+  })
+}
+
+resource "aws_lambda_invocation" "database_initializer" {
+  function_name   = aws_lambda_function.database_initializer.function_name
+  lifecycle_scope = "CRUD"
+
+  input = jsonencode({
+    schemaAutenticacao  = var.db_name_autenticacao
+    schemaUpload        = var.db_name_upload
+    schemaProcessamento = var.db_name_processamento
+    schemaRelatorio     = var.db_name_relatorio
+    usuarioInicial      = local.usuario_seed_login
+    nomeInicial         = local.usuario_seed_nome
+    senhaHashInicial    = local.usuario_seed_hash
+    scriptHash          = filesha256("${path.module}/../scripts/init-auth.sql")
+    lambdaHash          = null_resource.build_database_initializer_lambda.triggers.source_hash
+  })
+
+  depends_on = [
+    aws_lambda_function.database_initializer,
+    aws_cloudwatch_log_group.database_initializer
+  ]
 }

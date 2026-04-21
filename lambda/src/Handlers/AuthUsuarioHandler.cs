@@ -56,7 +56,7 @@ public class AuthUsuarioHandler
             }
             catch (JsonException)
             {
-                return BadRequest("Corpo da requisicao invalido. Esperado: { \"usuario\": \"admin\", \"senha\": \"Admin@123\" }");
+                return BadRequest("Corpo da requisicao invalido. Esperado: { \"usuario\": \"admin\", \"senha\": \"Admin@123456\" }");
             }
 
             if (loginRequest == null ||
@@ -138,4 +138,3 @@ public class AuthUsuarioHandler
         return $"{usuario[..2]}***";
     }
 }
-

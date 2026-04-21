@@ -1,3 +1,6 @@
+-- Este arquivo representa o bootstrap executado automaticamente pelo
+-- lambda inicializador de banco provisionado pelo Terraform.
+
 CREATE DATABASE IF NOT EXISTS auth_db;
 CREATE DATABASE IF NOT EXISTS upload_db;
 CREATE DATABASE IF NOT EXISTS processamento_db;

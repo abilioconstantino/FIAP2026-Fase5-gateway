@@ -9,6 +9,10 @@ locals {
         resource_id = aws_api_gateway_resource.auth_login.id
         methods     = "POST,OPTIONS"
       }
+      health = {
+        resource_id = aws_api_gateway_resource.health.id
+        methods     = "GET,OPTIONS"
+      }
     },
     {
       for chave, recurso in aws_api_gateway_resource.servicos :
@@ -78,4 +82,3 @@ resource "aws_api_gateway_integration_response" "cors" {
     "method.response.header.Access-Control-Allow-Origin"  = "'*'"
   }
 }
-

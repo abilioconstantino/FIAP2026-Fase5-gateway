@@ -17,9 +17,23 @@ output "private_subnets" {
   value       = aws_subnet.private[*].id
 }
 
+output "security_groups_compartilhados" {
+  description = "Security groups compartilhados da infraestrutura"
+  value = {
+    lambda      = aws_security_group.lambda.id
+    aplicacoes  = aws_security_group.aplicacoes.id
+    banco_mysql = aws_security_group.rds.id
+  }
+}
+
 output "api_gateway_url" {
   description = "URL base do API Gateway"
   value       = aws_api_gateway_stage.prod.invoke_url
+}
+
+output "api_gateway_health_url" {
+  description = "Endpoint publico de health do API Gateway"
+  value       = "${aws_api_gateway_stage.prod.invoke_url}/health"
 }
 
 output "api_gateway_rotas_base" {
@@ -87,8 +101,38 @@ output "sqs_queues" {
 output "lambda_functions" {
   description = "Lambdas publicados"
   value = {
-    auth_login = aws_lambda_function.auth_login.function_name
-    authorizer = aws_lambda_function.authorizer.function_name
+    auth_login           = aws_lambda_function.auth_login.function_name
+    authorizer           = aws_lambda_function.authorizer.function_name
+    database_initializer = aws_lambda_function.database_initializer.function_name
+  }
+}
+
+output "service_config_secrets" {
+  description = "Segredos consolidados por microsservico"
+  value = {
+    for chave, secret in aws_secretsmanager_secret.microservicos_config :
+    chave => {
+      arn  = secret.arn
+      name = secret.name
+    }
+  }
+}
+
+output "service_iam_policies" {
+  description = "Policies prontas para anexar aos microsservicos"
+  value = {
+    upload = {
+      arn  = aws_iam_policy.microservico_upload_access.arn
+      name = aws_iam_policy.microservico_upload_access.name
+    }
+    processamento = {
+      arn  = aws_iam_policy.microservico_processamento_access.arn
+      name = aws_iam_policy.microservico_processamento_access.name
+    }
+    relatorio = {
+      arn  = aws_iam_policy.microservico_relatorio_access.arn
+      name = aws_iam_policy.microservico_relatorio_access.name
+    }
   }
 }
 
@@ -115,6 +159,10 @@ output "microservices_configuracao_base" {
       schema_mysql           = var.db_name_upload
       bucket_diagramas       = aws_s3_bucket.diagramas.bucket
       fila_processamento_url = aws_sqs_queue.processar_diagrama.url
+      secret_name            = aws_secretsmanager_secret.microservicos_config["upload"].name
+      policy_arn             = aws_iam_policy.microservico_upload_access.arn
+      security_group_id      = aws_security_group.aplicacoes.id
+      private_subnet_ids     = aws_subnet.private[*].id
       jwt_issuer             = var.jwt_issuer
       jwt_audience           = var.jwt_audience
     }
@@ -124,15 +172,23 @@ output "microservices_configuracao_base" {
       bucket_diagramas    = aws_s3_bucket.diagramas.bucket
       fila_consumo_url    = aws_sqs_queue.processar_diagrama.url
       fila_publicacao_url = aws_sqs_queue.analise_concluida.url
+      secret_name         = aws_secretsmanager_secret.microservicos_config["processamento"].name
+      policy_arn          = aws_iam_policy.microservico_processamento_access.arn
+      security_group_id   = aws_security_group.aplicacoes.id
+      private_subnet_ids  = aws_subnet.private[*].id
     }
     relatorio = {
-      rota_publica     = "${aws_api_gateway_stage.prod.invoke_url}/api/relatorio"
-      target_group_arn = aws_lb_target_group.microservicos["relatorio"].arn
-      listener_port    = var.relatorio_listener_port
-      schema_mysql     = var.db_name_relatorio
-      fila_consumo_url = aws_sqs_queue.analise_concluida.url
-      jwt_issuer       = var.jwt_issuer
-      jwt_audience     = var.jwt_audience
+      rota_publica       = "${aws_api_gateway_stage.prod.invoke_url}/api/relatorio"
+      target_group_arn   = aws_lb_target_group.microservicos["relatorio"].arn
+      listener_port      = var.relatorio_listener_port
+      schema_mysql       = var.db_name_relatorio
+      fila_consumo_url   = aws_sqs_queue.analise_concluida.url
+      secret_name        = aws_secretsmanager_secret.microservicos_config["relatorio"].name
+      policy_arn         = aws_iam_policy.microservico_relatorio_access.arn
+      security_group_id  = aws_security_group.aplicacoes.id
+      private_subnet_ids = aws_subnet.private[*].id
+      jwt_issuer         = var.jwt_issuer
+      jwt_audience       = var.jwt_audience
     }
   }
 }
