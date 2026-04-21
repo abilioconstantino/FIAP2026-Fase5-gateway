@@ -201,10 +201,12 @@ resource "aws_api_gateway_deployment" "gateway" {
 
   depends_on = [
     aws_api_gateway_integration.auth_login,
+    aws_api_gateway_integration.health_get,
     aws_api_gateway_integration.servicos_base,
     aws_api_gateway_integration.servicos_proxy,
     aws_api_gateway_integration.cors,
-    aws_api_gateway_integration_response.cors
+    aws_api_gateway_integration_response.cors,
+    aws_api_gateway_integration_response.health_get
   ]
 
   lifecycle {
@@ -212,15 +214,12 @@ resource "aws_api_gateway_deployment" "gateway" {
   }
 
   triggers = {
-    redeployment = sha1(jsonencode({
-      auth_method_id           = aws_api_gateway_method.auth_login_post.id
-      auth_integration_id      = aws_api_gateway_integration.auth_login.id
-      servicos_base_methods    = [for _, item in aws_api_gateway_method.servicos_base_any : item.id]
-      servicos_base_integrals  = [for _, item in aws_api_gateway_integration.servicos_base : item.id]
-      servicos_proxy_methods   = [for _, item in aws_api_gateway_method.servicos_proxy_any : item.id]
-      servicos_proxy_integrals = [for _, item in aws_api_gateway_integration.servicos_proxy : item.id]
-      cors_methods             = [for _, item in aws_api_gateway_method.cors : item.id]
-    }))
+    redeployment = sha1(join("", [
+      filesha256("${path.module}/api-gateway.tf"),
+      filesha256("${path.module}/api-gateway-cors.tf"),
+      filesha256("${path.module}/api-gateway-operational.tf"),
+      jsonencode(local.servicos_gateway)
+    ]))
   }
 }
 

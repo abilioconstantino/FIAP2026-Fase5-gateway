@@ -27,6 +27,10 @@ locals {
   }
 
   bucket_diagramas_name = lower("${local.project_name}-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}-diagramas")
+  db_host               = split(":", aws_db_instance.mysql.endpoint)[0]
+  usuario_seed_login    = "admin"
+  usuario_seed_nome     = "Administrador Gateway"
+  usuario_seed_hash     = "$2a$11$CZNm30/WKAOfYODnrHtfZerNKp8ad6mdDMCcOqwbHMcJ4wmH.OyQW"
 
   common_tags = {
     Project     = local.project_name

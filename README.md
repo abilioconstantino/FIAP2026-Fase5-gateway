@@ -8,10 +8,12 @@ Este repositorio concentra a porta de entrada da solucao:
 - validacao de bearer token via Lambda Authorizer
 - roteamento do API Gateway para os microsservicos publicos `upload` e `relatorio`
 - provisionamento da infraestrutura compartilhada essencial para a fase 5
+- distribuicao de configuracao compartilhada pronta para consumo pelos times dos microsservicos
 
 ## Rotas previstas no gateway
 
 - `POST /auth/login`
+- `GET /health`
 - `ANY /api/upload`
 - `ANY /api/upload/{proxy+}`
 - `ANY /api/relatorio`
@@ -30,7 +32,10 @@ Os endpoints de negocio dos microsservicos continuam sendo responsabilidade de c
 - VPC Link entre API Gateway e NLB
 - Lambda de login
 - Lambda Authorizer de JWT
+- Lambda de inicializacao do banco compartilhado
 - logs de acesso do API Gateway no CloudWatch
+- segredos consolidados no Secrets Manager para `upload`, `processamento` e `relatorio`
+- policies IAM prontas para `upload`, `processamento` e `relatorio`
 
 ## Estrutura
 
@@ -48,3 +53,12 @@ O script [scripts/init-auth.sql](scripts/init-auth.sql) ja deixa um usuario inic
 
 O JWT base tambem ja foi definido no arquivo [JWT-CONFIG-REFERENCE.env](JWT-CONFIG-REFERENCE.env).
 
+## Como os times dos microsservicos consomem a infra
+
+O gateway ja entrega para cada microsservico:
+
+- um segredo consolidado no Secrets Manager
+- uma policy IAM pronta para anexar ao workload
+- as rotas publicas e target groups quando o servico for exposto pelo gateway
+
+Esses nomes e ARNs ficam publicados nos outputs do Terraform.

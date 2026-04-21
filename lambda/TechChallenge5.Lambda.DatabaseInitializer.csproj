@@ -8,20 +8,18 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>Tc5.DbInit</AssemblyName>
+    <RootNamespace>Tc5.DbInit</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Amazon.Lambda.Core" Version="2.4.0" />
-    <PackageReference Include="Amazon.Lambda.APIGatewayEvents" Version="2.7.1" />
     <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.4" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.10.0" />
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.10.0" />
-    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="MySqlConnector" Version="2.4.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="src\**\*.cs" Exclude="src\Handlers\JwtAuthorizerHandler.cs;src\DatabaseInitializer\**\*.cs" />
+    <Compile Include="src\DatabaseInitializer\**\*.cs" />
   </ItemGroup>
 
 </Project>
